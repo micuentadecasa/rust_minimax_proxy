@@ -1,0 +1,19 @@
+[package]
+name = "minimax_proxy"
+version = "0.1.0"
+edition = "2021"
+description = "Proxy server for MiniMax CLI with OAuth authentication"
+
+[dependencies]
+axum = { version = "0.8", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+dirs = "5"
+base64 = "0.22"
+sha2 = "0.10"
+url = "2"
