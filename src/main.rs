@@ -6,8 +6,9 @@ use axum::{
     Json, Router,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use sha2::{Sha256, Digest};
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
 use std::sync::Mutex;
@@ -35,6 +36,7 @@ struct Credentials {
     expires_at: u64,
     region: String,
     resource_url: Option<String>,
+    account: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -49,16 +51,25 @@ struct ChatRequest {
     model: Option<String>,
     max_tokens: Option<u32>,
     temperature: Option<f32>,
+    top_p: Option<f32>,
     stream: Option<bool>,
+    system: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct AnthropicRequest {
     model: String,
     messages: Vec<ChatMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    system: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -119,6 +130,7 @@ struct DeviceCodeResponse {
     interval: u64,
     expires_in: u64,
     code_verifier: String,
+    state: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -173,31 +185,121 @@ fn bad_request(message: &str, code: Option<&str>) -> (StatusCode, Json<ErrorResp
     )
 }
 
-fn get_credentials_path() -> std::path::PathBuf {
+fn get_config_path() -> std::path::PathBuf {
+    if let Ok(dir) = env::var("MMX_CONFIG_DIR") {
+        return std::path::PathBuf::from(dir).join("config.json");
+    }
+    dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".mmx")
+        .join("config.json")
+}
+
+fn get_legacy_credentials_path() -> std::path::PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join(".mmx")
         .join("credentials.json")
 }
 
-fn load_credentials() -> Option<Credentials> {
-    let path = get_credentials_path();
-    if path.exists() {
-        match fs::read_to_string(&path) {
-            Ok(content) => serde_json::from_str(&content).ok(),
-            Err(_) => None,
-        }
-    } else {
-        None
+fn parse_expires_at_iso(value: &str) -> Option<u64> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .ok()
+        .map(|dt| dt.timestamp().max(0) as u64)
+}
+
+fn expires_to_iso(expires_at: u64) -> String {
+    chrono::DateTime::<chrono::Utc>::from_timestamp(expires_at as i64, 0)
+        .unwrap_or_else(chrono::Utc::now)
+        .to_rfc3339()
+}
+
+fn token_expiry_to_epoch_seconds(expired_in: Option<u64>) -> u64 {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    match expired_in {
+        // MiniMax OAuth returns absolute epoch milliseconds.
+        Some(v) if v > 10_000_000_000 => v / 1000,
+        // Be tolerant of absolute epoch seconds.
+        Some(v) if v > 1_000_000_000 => v,
+        // Also tolerate duration seconds.
+        Some(v) => now + v,
+        None => now + 3600,
     }
 }
 
+fn load_credentials() -> Option<Credentials> {
+    let config_path = get_config_path();
+    if let Ok(content) = fs::read_to_string(&config_path) {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(oauth) = value.get("oauth") {
+                let access_token = oauth.get("access_token")?.as_str()?.to_string();
+                let refresh_token = oauth
+                    .get("refresh_token")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let expires_at = oauth
+                    .get("expires_at")
+                    .and_then(|v| v.as_str())
+                    .and_then(parse_expires_at_iso)?;
+                let region = oauth
+                    .get("region")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("global")
+                    .to_string();
+                let resource_url = oauth
+                    .get("resource_url")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                let account = oauth
+                    .get("account")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                return Some(Credentials {
+                    access_token,
+                    refresh_token,
+                    expires_at,
+                    region,
+                    resource_url,
+                    account,
+                });
+            }
+        }
+    }
+
+    // Backward compatibility with the old guide's ~/.mmx/credentials.json format.
+    let legacy_path = get_legacy_credentials_path();
+    fs::read_to_string(&legacy_path)
+        .ok()
+        .and_then(|content| serde_json::from_str(&content).ok())
+}
+
 fn save_credentials(creds: &Credentials) -> Result<()> {
-    let path = get_credentials_path();
+    let path = get_config_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).context("Failed to create .mmx directory")?;
     }
-    let content = serde_json::to_string_pretty(creds).context("Failed to serialize credentials")?;
+
+    let mut config = fs::read_to_string(&path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+
+    config["oauth"] = serde_json::json!({
+        "access_token": creds.access_token,
+        "refresh_token": creds.refresh_token,
+        "expires_at": expires_to_iso(creds.expires_at),
+        "region": creds.region,
+        "resource_url": creds.resource_url,
+        "account": creds.account,
+    });
+    config["region"] = serde_json::json!(creds.region);
+
+    let content =
+        serde_json::to_string_pretty(&config).context("Failed to serialize credentials")?;
     fs::write(&path, content).context("Failed to write credentials")?;
     Ok(())
 }
@@ -225,6 +327,7 @@ async fn start_device_code(region: String) -> Result<DeviceCodeResponse> {
     let code_challenge = generate_pkce_challenge(&code_verifier);
 
     let client = reqwest::Client::new();
+    let state = generate_pkce_verifier();
     let resp = client
         .post(format!("{}/oauth2/device/code", oauth_host(&region)))
         .form(&[
@@ -232,6 +335,7 @@ async fn start_device_code(region: String) -> Result<DeviceCodeResponse> {
             ("scope", "openid profile coding_plan"),
             ("code_challenge", &code_challenge),
             ("code_challenge_method", "S256"),
+            ("state", &state),
         ])
         .send()
         .await
@@ -247,38 +351,58 @@ async fn start_device_code(region: String) -> Result<DeviceCodeResponse> {
     struct RawDeviceCodeResponse {
         #[serde(rename = "user_code")]
         user_code: Option<String>,
+        #[serde(rename = "verification_uri_complete")]
+        verification_uri_complete: Option<String>,
         #[serde(rename = "verification_uri")]
         verification_uri: Option<String>,
         interval: Option<u64>,
         #[serde(rename = "expired_in")]
         expired_in: Option<u64>,
+        state: Option<String>,
+        #[serde(rename = "base_resp")]
+        base_resp: Option<BaseResp>,
     }
 
-    let raw: RawDeviceCodeResponse = resp.json().await.context("Failed to parse device code response")?;
+    #[derive(Deserialize)]
+    struct BaseResp {
+        #[serde(rename = "status_code")]
+        status_code: Option<i32>,
+    }
+
+    let raw: RawDeviceCodeResponse = resp
+        .json()
+        .await
+        .context("Failed to parse device code response")?;
+
+    if let Some(br) = raw.base_resp {
+        if br.status_code != Some(0) {
+            return Err(anyhow!(
+                "Device code request failed: status_code={}",
+                br.status_code.unwrap_or(-1)
+            ));
+        }
+    }
+
+    if raw.state.as_deref() != Some(&state) {
+        return Err(anyhow!("OAuth state mismatch"));
+    }
 
     Ok(DeviceCodeResponse {
         user_code: raw.user_code.unwrap_or_default(),
-        verification_uri: raw.verification_uri.unwrap_or_default(),
-        interval: raw.interval.unwrap_or(5),
-        expires_in: raw.expired_in.unwrap_or(1800),
+        verification_uri: raw
+            .verification_uri_complete
+            .or(raw.verification_uri)
+            .unwrap_or_default(),
+        interval: raw.interval.unwrap_or(3000),
+        expires_in: raw.expired_in.unwrap_or(0),
         code_verifier,
+        state,
     })
 }
 
 fn generate_pkce_verifier() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    
     let mut bytes = [0u8; 32];
-    for (i, byte) in bytes.iter_mut().enumerate() {
-        *byte = ((now >> i) & 0xFF) as u8 ^ ((now >> (i + 8)) & 0xFF) as u8;
-    }
-    bytes[0] ^= 0xAB;
-    bytes[31] ^= 0xCD;
-    
+    rand::thread_rng().fill_bytes(&mut bytes);
     URL_SAFE_NO_PAD.encode(&bytes)
 }
 
@@ -290,7 +414,11 @@ fn generate_pkce_challenge(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(&result)
 }
 
-async fn poll_for_token(region: &str, user_code: &str, code_verifier: &str) -> Result<TokenResponse> {
+async fn poll_for_token(
+    region: &str,
+    user_code: &str,
+    code_verifier: &str,
+) -> Result<TokenResponse> {
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("{}/oauth2/token", oauth_host(region)))
@@ -306,10 +434,10 @@ async fn poll_for_token(region: &str, user_code: &str, code_verifier: &str) -> R
 
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
-    
+
     // Debug: print what we got
     info!("Poll response status: {}, body: {}", status, text);
-    
+
     // Check if it's not JSON
     if !text.starts_with('{') && !text.starts_with('[') {
         // Not JSON - might be error page or something else
@@ -325,7 +453,8 @@ async fn poll_for_token(region: &str, user_code: &str, code_verifier: &str) -> R
         return Err(anyhow!("Non-JSON response ({}): {}", status, text));
     }
 
-    let token: TokenResponse = serde_json::from_str(&text).context("Failed to parse token response")?;
+    let token: TokenResponse =
+        serde_json::from_str(&text).context("Failed to parse token response")?;
     Ok(token)
 }
 
@@ -342,23 +471,30 @@ async fn refresh_token(region: &str, refresh_token: &str) -> Result<TokenRespons
         .await
         .context("Failed to refresh token")?;
 
-    let token: TokenResponse = resp.json().await.context("Failed to parse refresh response")?;
+    let token: TokenResponse = resp
+        .json()
+        .await
+        .context("Failed to parse refresh response")?;
     Ok(token)
 }
 
 fn get_access_token(state: &AppState) -> Result<String> {
     let creds = state.credentials.lock().unwrap();
-    
+
     let creds = match creds.as_ref() {
         Some(c) => c,
-        None => return Err(anyhow!("Not authenticated. Use POST /auth/login to start OAuth flow.")),
+        None => {
+            return Err(anyhow!(
+                "Not authenticated. Use POST /auth/login to start OAuth flow."
+            ))
+        }
     };
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    
+
     if creds.expires_at <= now + 300 {
         return Err(anyhow!("Token expired. Use POST /auth/refresh to refresh."));
     }
@@ -405,18 +541,33 @@ async fn chat_handler(
     let model = request.model.unwrap_or_else(|| "MiniMax-M2.7".to_string());
     let api_base = api_host(&creds.region, creds.resource_url.as_deref());
 
+    let mut system = request.system;
+    let mut messages = Vec::new();
+    for msg in request.messages {
+        if msg.role == "system" {
+            if system.is_none() {
+                system = Some(msg.content);
+            }
+        } else {
+            messages.push(msg);
+        }
+    }
+
     let anthropic_req = AnthropicRequest {
         model: model.clone(),
-        messages: request.messages,
+        messages,
         max_tokens: request.max_tokens.or(Some(4096)),
         temperature: request.temperature,
-        stream: request.stream,
+        top_p: request.top_p,
+        // OpenAI streaming translation is not implemented yet; request a normal JSON response.
+        stream: Some(false),
+        system,
     };
 
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("{}/anthropic/v1/messages", api_base))
-        .header("x-api-key", &access_token)
+        .header("x-api-key", access_token)
         .header("anthropic-version", "2023-06-01")
         .header("content-type", "application/json")
         .json(&anthropic_req)
@@ -428,7 +579,7 @@ async fn chat_handler(
         })?;
 
     let status = resp.status();
-    
+
     if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
         return Err(auth_error(
             "MiniMax OAuth token invalid or expired. Use POST /auth/refresh",
@@ -448,7 +599,10 @@ async fn chat_handler(
     if !status.is_success() {
         let error_text = resp.text().await.unwrap_or_default();
         error!("Request failed ({}): {}", status, error_text);
-        return Err(bad_request(&format!("Request failed: {}", error_text), None));
+        return Err(bad_request(
+            &format!("Request failed: {}", error_text),
+            None,
+        ));
     }
 
     let anthropic_resp: AnthropicResponse = resp.json().await.map_err(|e| {
@@ -479,7 +633,9 @@ async fn chat_handler(
                 content,
             },
             index: 0,
-            finish_reason: anthropic_resp.stop_reason.unwrap_or_else(|| "stop".to_string()),
+            finish_reason: anthropic_resp
+                .stop_reason
+                .unwrap_or_else(|| "stop".to_string()),
         }],
     };
 
@@ -503,7 +659,7 @@ async fn auth_status_handler(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
     let creds = state.credentials.lock().unwrap();
-    
+
     match creds.as_ref() {
         Some(c) => {
             let now = std::time::SystemTime::now()
@@ -559,7 +715,7 @@ async fn auth_token_handler(
     info!("Polling for token with user_code... (will retry until authorized)");
 
     let interval_ms = 3000;
-    
+
     let token_resp = loop {
         match poll_for_token(&region, &body.user_code, &body.code_verifier).await {
             Ok(resp) => {
@@ -572,7 +728,7 @@ async fn auth_token_handler(
                 return Err(server_error(&format!("Token poll failed: {}", e)));
             }
         };
-        
+
         info!("Authorization pending, waiting...");
         tokio::time::sleep(tokio::time::Duration::from_millis(interval_ms)).await;
     };
@@ -586,11 +742,7 @@ async fn auth_token_handler(
 
     let token = token_resp;
 
-    let expires_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-        + token.expired_in.unwrap_or(3600);
+    let expires_at = token_expiry_to_epoch_seconds(token.expired_in);
 
     let credentials = Credentials {
         access_token: token.access_token.unwrap(),
@@ -598,6 +750,7 @@ async fn auth_token_handler(
         expires_at,
         region: region.clone(),
         resource_url: token.resource_url,
+        account: None,
     };
 
     if let Err(e) = save_credentials(&credentials) {
@@ -625,10 +778,15 @@ async fn auth_token_handler(
 async fn auth_refresh_handler(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
-    let (region, refresh_token_str) = {
+    let (region, refresh_token_str, old_resource_url, old_account) = {
         let creds = state.credentials.lock().unwrap();
         match creds.as_ref() {
-            Some(c) => (c.region.clone(), c.refresh_token.clone()),
+            Some(c) => (
+                c.region.clone(),
+                c.refresh_token.clone(),
+                c.resource_url.clone(),
+                c.account.clone(),
+            ),
             None => return Err(auth_error("Not authenticated", Some("AUTH_REQUIRED"))),
         }
     };
@@ -659,18 +817,15 @@ async fn auth_refresh_handler(
 
     let token = token_resp;
 
-    let expires_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-        + token.expired_in.unwrap_or(3600);
+    let expires_at = token_expiry_to_epoch_seconds(token.expired_in);
 
     let credentials = Credentials {
         access_token: token.access_token.unwrap(),
         refresh_token: token.refresh_token.unwrap_or(refresh_token_str),
         expires_at,
         region: region.clone(),
-        resource_url: token.resource_url,
+        resource_url: token.resource_url.or(old_resource_url),
+        account: old_account,
     };
 
     if let Err(e) = save_credentials(&credentials) {
@@ -714,10 +869,10 @@ fn open_browser(url: &str) {
 
 async fn auto_auth(state: &AppState) -> Result<()> {
     info!("Starting automatic OAuth authentication...");
-    
+
     let region = "global";
     let device_resp = start_device_code(region.to_string()).await?;
-    
+
     println!();
     println!("==============================================");
     println!("  🔐 MiniMax OAuth Authentication Required");
@@ -736,15 +891,15 @@ async fn auto_auth(state: &AppState) -> Result<()> {
     println!("  Waiting for authentication...");
     println!("  (Press Ctrl+C to exit and try again)");
     println!();
-    
+
     // Open browser
     open_browser(&device_resp.verification_uri);
-    
+
     // Poll for token - MiniMax's interval appears to be in milliseconds (3000 = 3 seconds)
     let interval_ms = device_resp.interval;
-    
+
     info!("Polling every {}ms... (interval from server)", interval_ms);
-    
+
     let token_resp = loop {
         match poll_for_token(region, &device_resp.user_code, &device_resp.code_verifier).await {
             Ok(resp) => {
@@ -756,45 +911,45 @@ async fn auto_auth(state: &AppState) -> Result<()> {
                 error!("Poll error: {}", e);
             }
         };
-        
+
         print!(".");
         std::io::Write::flush(&mut std::io::stdout()).ok();
         tokio::time::sleep(tokio::time::Duration::from_millis(interval_ms)).await;
     };
-    
+
     println!();
-    
+
     if token_resp.status != "success" || token_resp.access_token.is_none() {
-        return Err(anyhow!("Authorization failed: status={}", token_resp.status));
+        return Err(anyhow!(
+            "Authorization failed: status={}",
+            token_resp.status
+        ));
     }
-    
-    let expires_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-        + token_resp.expired_in.unwrap_or(3600);
-    
+
+    let expires_at = token_expiry_to_epoch_seconds(token_resp.expired_in);
+
     let credentials = Credentials {
         access_token: token_resp.access_token.unwrap(),
         refresh_token: token_resp.refresh_token.unwrap_or_default(),
         expires_at,
         region: region.to_string(),
         resource_url: token_resp.resource_url,
+        account: None,
     };
-    
+
     if let Err(e) = save_credentials(&credentials) {
         error!("Failed to save credentials: {}", e);
     }
-    
+
     {
         let mut creds = state.credentials.lock().unwrap();
         *creds = Some(credentials.clone());
     }
-    
+
     println!();
     println!("  ✅ Authentication successful!");
     println!();
-    
+
     Ok(())
 }
 
@@ -840,7 +995,7 @@ async fn main() -> Result<()> {
         println!("  MiniMax OAuth Proxy");
         println!("==============================================");
         println!();
-        
+
         if let Err(e) = auto_auth(&state).await {
             error!("Auto-auth failed: {}", e);
             println!();
