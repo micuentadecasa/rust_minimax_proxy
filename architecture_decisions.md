@@ -8,6 +8,7 @@ This document is the living map for the MiniMax OAuth proxy. Future feature work
 - Main implementation: `src/main.rs`.
 - Python smoke/client script: `test_client.py`.
 - Convenience runner: `first.sh` starts the proxy, waits for `/health`, runs `test_client.py`, then stops the proxy.
+- Full app runner: `run_app.sh` starts the proxy, waits for `/health`, starts the React app, and cleans up proxy/app listeners on Ctrl+C or termination.
 - Project skill for feature work: `.pi/skills/minimax-goal-engineering/SKILL.md`.
 - Goal/rider specs for future rounds live in `docs/goals/`.
 
@@ -92,10 +93,56 @@ UI/Playwright policy for future UI work:
 - Duplicate/effectively-identical waiting screenshots should be discarded or skipped using hashes, pixel-diff thresholds, or Playwright screenshot comparison.
 - The final assertion should analyze the remaining screenshot progression and verify that the feature is visibly working, not only that selectors exist.
 
-## 7. Known gaps / future candidates
+## 7. React/CopilotKit chat app
+
+A browser UI now lives under `app/`:
+
+- Build tool: Vite + React.
+- CopilotKit packages: `@copilotkit/react-core` and `@copilotkit/react-ui`.
+- Entry point: `app/src/main.jsx`.
+- Styling: `app/src/styles.css`.
+- The app is wrapped in `CopilotKit` for future CopilotKit runtime expansion, but this first chat surface sends direct OpenAI-compatible `POST /v1/chat/completions` requests to the Rust proxy.
+- Browser proxy URL is configurable with `VITE_PROXY_BASE_URL`; default is `http://localhost:8080`.
+- Default model is configurable with `VITE_MINIMAX_MODEL`; default is `MiniMax-M2.7`.
+
+Browser support required a CORS layer on the Axum app:
+
+- `Cargo.toml` includes `tower-http` with the `cors` feature.
+- `src/main.rs` applies `CorsLayer` allowing browser `GET`, `POST`, and `OPTIONS` requests.
+
+The combined launcher is `run_app.sh`:
+
+- Stops stale listeners on the proxy and app ports.
+- Starts the Rust proxy on `PORT` (default `8080`).
+- Waits for `/health`.
+- Installs app dependencies if `app/node_modules` is missing.
+- Starts Vite on `APP_PORT` (default `5173`).
+- Cleans up proxy and app listeners on exit, Ctrl+C, or termination.
+- Disables repeated trap execution during cleanup so interrupt handling returns the terminal cleanly.
+
+Generated UI verification for this round lives in ignored `.test/playwright/`:
+
+- Test: `.test/playwright/tests/chat-ui.spec.mjs`.
+- Screenshots: `.test/playwright/screenshots/`.
+- Analysis report: `.test/playwright/screenshot-analysis.json`.
+- The test sends a chat message, polls screenshots while the LLM call is pending, skips duplicate screenshots by hash, and asserts the final assistant answer is visibly rendered.
+
+## 8. Base-solution documentation
+
+`README.md` is now written as a base-solution guide for future projects. It documents:
+
+- The Rust MiniMax OAuth proxy and OpenAI-compatible endpoint.
+- The React/CopilotKit chat app.
+- `first.sh` and `run_app.sh` usage.
+- The `.pi/skills/minimax-goal-engineering` workflow.
+- `.test/` generated artifact policy.
+- Playwright screenshot polling/deduplication policy for UI verification.
+- A reuse checklist for deriving new solutions from this repository.
+
+## 9. Known gaps / future candidates
 
 - No OpenAI-compatible streaming response translation yet.
 - No dedicated Rust integration test harness yet.
-- No UI exists today, so Playwright is not installed or configured.
+- The React app is a first-pass direct chat surface; it does not yet use a CopilotKit runtime server, actions, agent state, or built-in Copilot chat widgets.
 - Error mapping is functional but could be made more OpenAI-compatible.
 - `src/main.rs` is still monolithic; future work may split auth, chat, config, and server modules once tests cover current behavior.

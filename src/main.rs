@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use axum::{
     extract::State,
-    http::StatusCode,
+    http::{Method, StatusCode},
     routing::{get, post},
     Json, Router,
 };
@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
 use std::sync::Mutex;
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info};
 
 const CLIENT_ID: &str = "659cf4c1-615c-45f6-a5f6-4bf15eb476e5";
@@ -1014,6 +1015,11 @@ async fn main() -> Result<()> {
     println!("==============================================");
     println!();
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers(Any);
+
     let app = Router::new()
         .route("/health", get(health_handler))
         .route("/auth/status", get(auth_status_handler))
@@ -1021,6 +1027,7 @@ async fn main() -> Result<()> {
         .route("/auth/token", post(auth_token_handler))
         .route("/auth/refresh", post(auth_refresh_handler))
         .route("/v1/chat/completions", post(chat_handler))
+        .layer(cors)
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", port);
