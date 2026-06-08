@@ -17,13 +17,17 @@ A feature is **not done** until its named tests pass and `architecture_decisions
 
 ## When to use
 
-Use this skill automatically when the user asks for a new feature, bug fix, endpoint, testability improvement, UI, auth change, MiniMax behavior change, or anything like:
+Use this skill automatically when the user asks for a new feature, bug fix, endpoint, testability improvement, UI, auth change, MiniMax behavior change, agentic solution, or anything like:
 
 - "add feature X"
 - "make the proxy do Y"
 - "create a goal/rider"
 - "use goal engineering"
+- "new agentic solution"
+- "build with CopilotKit"
 - "next round"
+
+If the request mentions CopilotKit, agentic UI, generative UI, shared state, agent config, HITL, A2UI, LangGraph, sub-agents, or a new agentic solution, also load and follow `.pi/skills/copilotkit_helper/SKILL.md` as the CopilotKit helper skill.
 
 ## Project-specific map
 
@@ -36,6 +40,7 @@ Read these before drafting a goal/rider:
 5. `test_client.py` and `first.sh` — smoke/e2e verification.
 6. `README.md` and `guide.md` — intended user flow.
 7. Recent commits: `git log --oneline -30`.
+8. For CopilotKit/agentic work: `.pi/skills/copilotkit_helper/SKILL.md` and the specific reference docs it points to.
 
 If `architecture_decisions.md` is missing, create it before implementation and record the current architecture.
 
@@ -48,6 +53,7 @@ If `architecture_decisions.md` is missing, create it before implementation and r
 - Identify exact files/functions likely to change.
 - Identify the fastest automated test that can prove the feature.
 - If a UI is involved and Playwright is not configured, add Playwright setup only when it is truly needed.
+- If the feature is CopilotKit/agentic, read `.pi/skills/copilotkit_helper/SKILL.md`, select the CopilotKit primitive(s), and include the chosen pattern in the goal/rider before coding.
 
 ### Step 1.5 — Clean disposable test workspace
 
@@ -98,6 +104,7 @@ GOAL: <one sentence>. <short paragraph: current pain -> change -> expected resul
 - `cargo test`
 - `./first.sh` or a narrower smoke command when network/API cost matters
 - If UI exists: Playwright test command passes.
+- If CopilotKit/agentic: rider names the CopilotKit helper skill and chosen pattern.
 
 **Stop when** the named tests pass, the feature works through the relevant endpoint/script/UI, and `architecture_decisions.md` records the new behavior and touch points.
 ```
@@ -123,10 +130,18 @@ This rider implements the goal at `<absolute path to goal>`. It adds <summary> a
 
 - `<file>` — <why it may change>.
 - `<test file>` — <test to add/update>.
+- For CopilotKit/agentic work: `.pi/skills/copilotkit_helper/SKILL.md` — helper skill and reference-doc map.
 
 ## Test contract
 
 Each non-doc phase must name at least one test and write it before implementation. Watch it fail when feasible.
+
+For CopilotKit/agentic work, add these rider sections before implementation:
+
+- `## CopilotKit pattern` — chosen primitive(s) and why, from the CopilotKit helper skill.
+- `## Agent/runtime contract` — endpoint, state, tools, prompts/config.
+- `## UI contract` — components, selectors, loading/error/done states.
+- `## Visual verification` — screenshots, polling interval, timeout, dedupe method, final assertion.
 
 Preferred test order:
 
@@ -227,6 +242,7 @@ Use 7 phases for small changes or expand to P1..P11 for larger work. The importa
 - Never claim a feature is complete without running tests, unless the user explicitly asks not to run them.
 - If a network/API smoke test is expensive or blocked, still run local tests and explain exactly which smoke was not run and why.
 - If Playwright is requested or needed, add it as a project test tool and write a browser test that asserts visible behavior, not implementation details. The Playwright test must record screenshots, handle slow LLM/API responses by polling over time, discard duplicate waiting-state images, and analyze the remaining screenshots for the expected visible result.
+- For CopilotKit/agentic solutions, use this skill for goal/rider/process discipline and `.pi/skills/copilotkit_helper/SKILL.md` for CopilotKit architecture/pattern discipline.
 
 ## Validation snippets
 

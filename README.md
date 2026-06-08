@@ -90,13 +90,21 @@ This starts the proxy, waits for health, runs `test_client.py`, and stops the pr
 
 ## Project skill: goal-engineered feature work
 
-The project-local skill is here:
+The main project-local skill is here:
 
 ```text
 .pi/skills/minimax-goal-engineering/SKILL.md
 ```
 
 Use this skill for every new feature, bug fix, endpoint, UI change, or behavior change. It makes this repository self-documenting and reusable.
+
+A second helper skill focuses on CopilotKit agentic solutions:
+
+```text
+.pi/skills/copilotkit_helper/SKILL.md
+```
+
+Use both skills together when a feature is a CopilotKit/agentic solution. The goal-engineering skill controls the round process; the CopilotKit helper skill controls the agentic architecture and UI pattern selection.
 
 The skill requires each round to:
 
@@ -178,6 +186,7 @@ When creating a new solution from this base:
 6. Keep `docs/goals/` as the historical corpus of feature decisions.
 7. Keep `.test/` ignored for generated test scripts and visual artifacts.
 8. For each feature, use the skill: goal -> rider -> test first -> implement -> verify -> architecture update.
+9. For CopilotKit/agentic features, also use `.pi/skills/copilotkit_helper/SKILL.md` to choose the right pattern: chat/sidebar, agent config, shared state, generative UI, fixed/dynamic A2UI, HITL, sub-agents, or LangGraph.
 
 ## Current known gaps
 

@@ -10,6 +10,8 @@ This document is the living map for the MiniMax OAuth proxy. Future feature work
 - Convenience runner: `first.sh` starts the proxy, waits for `/health`, runs `test_client.py`, then stops the proxy.
 - Full app runner: `run_app.sh` starts the proxy, waits for `/health`, starts the React app, and cleans up proxy/app listeners on Ctrl+C or termination.
 - Project skill for feature work: `.pi/skills/minimax-goal-engineering/SKILL.md`.
+- CopilotKit helper skill for agentic UI/agent architecture: `.pi/skills/copilotkit_helper/SKILL.md`.
+- CopilotKit reference docs live beside that helper skill in `.pi/skills/copilotkit_helper/*.md`.
 - Goal/rider specs for future rounds live in `docs/goals/`.
 
 ## 2. Runtime API
@@ -127,7 +129,16 @@ Generated UI verification for this round lives in ignored `.test/playwright/`:
 - Analysis report: `.test/playwright/screenshot-analysis.json`.
 - The test sends a chat message, polls screenshots while the LLM call is pending, skips duplicate screenshots by hash, and asserts the final assistant answer is visibly rendered.
 
-## 8. Base-solution documentation
+## 8. Skill composition for agentic solutions
+
+Two project skills are intended to compose:
+
+- `.pi/skills/minimax-goal-engineering/SKILL.md` controls round discipline: read architecture, create goal+rider, clean `.test/`, write tests first, verify, and update architecture decisions.
+- `.pi/skills/copilotkit_helper/SKILL.md` controls CopilotKit agentic architecture: choose chat/sidebar, agent config, shared state, components/tools, tool rendering, state rendering, reasoning, fixed/dynamic A2UI, HITL, sub-agents, or LangGraph patterns from the local reference docs.
+
+When a user asks for a new feature that is also an agentic solution, both skills should be used. The goal/rider should cite the CopilotKit helper skill, name the selected CopilotKit pattern, define the agent/runtime contract, define the UI contract, and include Playwright screenshot verification for visible UI behavior.
+
+## 9. Base-solution documentation
 
 `README.md` is now written as a base-solution guide for future projects. It documents:
 
@@ -139,7 +150,7 @@ Generated UI verification for this round lives in ignored `.test/playwright/`:
 - Playwright screenshot polling/deduplication policy for UI verification.
 - A reuse checklist for deriving new solutions from this repository.
 
-## 9. Known gaps / future candidates
+## 10. Known gaps / future candidates
 
 - No OpenAI-compatible streaming response translation yet.
 - No dedicated Rust integration test harness yet.
