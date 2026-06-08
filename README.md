@@ -55,7 +55,12 @@ The browser app lives in `app/` and uses:
   - `@copilotkit/react-core`
   - `@copilotkit/react-ui`
 
-For now the UI is intentionally simple: a chat screen posts directly to the proxy's `/v1/chat/completions` endpoint and renders the assistant response. The app is wrapped with CopilotKit so future solutions can add CopilotKit runtime features, actions, richer widgets, and agent state.
+The UI includes two modes:
+
+- **Normal chat** posts directly to the proxy's `/v1/chat/completions` endpoint and renders the assistant response.
+- **PRD → plan LangGraph** runs a two-agent graph in the React app: a PRD agent turns the user's request into product requirements, then a planning agent turns that PRD into an implementation plan. Both agents call the Rust proxy through the same OpenAI-compatible endpoint.
+
+The app is wrapped with CopilotKit so future solutions can add a dedicated CopilotKit runtime, actions, richer widgets, and agent state.
 
 Run the full local app:
 
@@ -170,8 +175,8 @@ cargo test
 # Full proxy + React app
 ./run_app.sh
 
-# Frontend build
-cd app && npm install && npm run build
+# Frontend unit tests and build
+cd app && npm install && npm test && npm run build
 ```
 
 ## Reusing this as a base for another solution

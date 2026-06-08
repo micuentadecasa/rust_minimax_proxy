@@ -150,6 +150,21 @@ When creating a goal/rider for an agentic solution, the rider must include:
 - `## Visual verification` — screenshots, polling interval, timeout, dedupe method, final assertion.
 - `## Out of scope` — especially dynamic UI/runtime features not included in the current round.
 
+## Lessons from local agent-graph UI rounds
+
+When building a CopilotKit/LangGraph or multi-agent chat UI in this repo:
+
+- If the user asks for an agentic workflow, make the agentic path the default or make the launch control impossible to confuse with normal chat. Do not leave the UI defaulting to a generic assistant path unless explicitly requested.
+- Agent metadata must appear in the conversation surface the user is watching, not in a secondary area below/outside the chat. For multi-agent flows, render ordered cards/messages for each agent with:
+  - agent name
+  - role/purpose
+  - status: waiting/running/complete/error
+  - tools used
+  - output/artifact
+- Browser tests must verify the actual default user path, not a manually preconfigured happy path. For example: open app -> do not change the mode selector -> type request -> click the visible submit button -> assert agent cards appear.
+- For slow or API-backed flows, mocked Playwright tests are acceptable for deterministic UI contract checks, but they must still assert visible text and DOM placement such as agent cards inside `data-testid="message-list"`.
+- Screenshots alone are not enough; pair screenshot capture with assertions that agent names/tools are visible in the expected conversation container.
+
 ## Done criteria
 
 A CopilotKit feature is done only when:

@@ -150,10 +150,50 @@ When a user asks for a new feature that is also an agentic solution, both skills
 - Playwright screenshot polling/deduplication policy for UI verification.
 - A reuse checklist for deriving new solutions from this repository.
 
-## 10. Known gaps / future candidates
+## 10. React LangGraph PRD/plan workflow
+
+The React app now has a second chat mode: **PRD → plan LangGraph**.
+
+- New graph module: `app/src/agentGraph.js`.
+- Durable graph tests: `app/src/agentGraph.test.mjs` using Node's built-in test runner with mocked proxy responses.
+- Frontend package changes:
+  - `@langchain/langgraph` is installed for a two-node graph (`prdAgent` then `planningAgent`).
+  - `npm test` runs `node --test src/*.test.mjs`.
+- Runtime boundary remains browser → Rust proxy:
+  - Both agents call `POST ${VITE_PROXY_BASE_URL}/v1/chat/completions`.
+  - No new Rust routes were added.
+  - No dedicated CopilotKit runtime server exists yet.
+- UI contract in `app/src/main.jsx`:
+  - The default mode is now `prd-plan` so the first submit launches the two-agent graph instead of normal assistant chat.
+  - Mode selector: `data-testid="mode-select"`; users can still choose normal chat manually.
+  - Submit/loading copy says `Run agent graph` / `Running PRD Agent, then Planning Agent…` while in graph mode.
+  - Loading step text: `data-testid="agent-step-status"`.
+  - Ordered trace wrapper: `data-testid="agent-trace"`, rendered inside `data-testid="message-list"` so agent identity/tool cards appear in the conversation rather than below it.
+  - PRD Agent card: `data-testid="agent-card-prd"`, labeled as the first agent, showing name, role, status, tool list, and PRD output.
+  - Planning Agent card: `data-testid="agent-card-plan"`, labeled as the second agent, showing name, role, status, tool list, and plan output after the PRD agent completes.
+  - Final outputs remain queryable as `data-testid="prd-output"` and `data-testid="plan-output"`.
+- Agent metadata is exported from `app/src/agentGraph.js` as `AGENTS`; graph progress events include `agentId`, `agentName`, `role`, `tools`, `status`, and `output`.
+- Styling for graph agent trace cards lives in `app/src/styles.css`.
+- Generated Playwright visual-verification script for this round lives at `.test/playwright/tests/langgraph-prd-plan-ui.spec.mjs`; it polls screenshots, hashes duplicates, and writes `.test/playwright/screenshot-analysis.json` when run.
+
+Verification run for this change:
+
+```bash
+cargo check
+cargo test
+cd app && npm test
+cd app && npm run build
+cd app && npx playwright test --config=../.test/playwright/playwright.config.mjs
+```
+
+The Playwright test uses mocked proxy responses, asserts that the default selector value is `prd-plan`, submits without manually changing mode, verifies `PRD Agent`, `Planning Agent`, and `MiniMax proxy chat completion` are visible inside the chat conversation, and captures `.test/playwright/screenshots/default-agent-graph-final.png` plus `.test/playwright/screenshot-analysis.json`.
+
+`npm run build` currently succeeds with Vite warnings from dependency/browser externalization and large chunks after adding LangGraph/CopilotKit dependencies. Future production hardening should consider code-splitting or moving LangGraph orchestration behind a backend runtime.
+
+## 11. Known gaps / future candidates
 
 - No OpenAI-compatible streaming response translation yet.
 - No dedicated Rust integration test harness yet.
-- The React app is a first-pass direct chat surface; it does not yet use a CopilotKit runtime server, actions, agent state, or built-in Copilot chat widgets.
+- The React app is still browser-orchestrated; it does not yet use a CopilotKit runtime server, actions, backend agent state, or built-in Copilot chat widgets.
 - Error mapping is functional but could be made more OpenAI-compatible.
 - `src/main.rs` is still monolithic; future work may split auth, chat, config, and server modules once tests cover current behavior.
