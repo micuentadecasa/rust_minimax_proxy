@@ -1,0 +1,190 @@
+{
+  "personal_information": {
+    "full_name": "Luis Molina Martinez",
+    "languages": [
+      { "language": "Spanish", "level": "Native" },
+      { "language": "English", "level": "B2" }
+    ]
+  },
+
+  "professional_identity": {
+    "primary_role": "Product-led Technical Leader in Responsible AI",
+    "secondary_roles": [
+      "AI Solutions Architect",
+      "AI Governance & Compliance Lead",
+      "Engineering Manager"
+    ],
+    "positioning_statement": "Product-oriented technical leader specialising in the design, delivery, and governance of AI systems that are compliant by design. Combines hands-on engineering and architecture with product ownership, Responsible AI practices, AI audits, and regulatory compliance under GDPR and the EU AI Act."
+  },
+
+  "professional_summary": {
+    "headline": "Product-led Technical Leader in AI Governance,Compliance, and Scalable AI Platforms",
+    "summary": "Technical Leader and Solutions Architect with over 20 years of experience, including more than 6 years delivering global solutions for United Nations organisations. Strong product mindset with end-to-end ownership of AI products, from discovery and MVP definition to production deployment, governance, and audit readiness. Proven expertise in Generative AI, Cloud Platforms, Responsible AI, GDPR, and EU AI Act compliance, translating regulatory requirements into scalable, secure, and auditable AI products."
+  },
+
+  "core_competencies": {
+    "product_and_platform_leadership": [
+      "Product ownership and roadmap definition",
+      "AI product discovery and risk classification",
+      "MVP definition with compliance constraints",
+      "Backlog prioritisation including governance tasks",
+      "Stakeholder alignment (legal, security, business)",
+      "Operationalisation and adoption of AI products"
+    ],
+    "responsible_ai_and_compliance": [
+      "Responsible AI by design",
+      "AI risk assessment and classification",
+      "GDPR compliance for AI systems",
+      "EU AI Act readiness and gap analysis",
+      "AI audit preparation and evidence generation",
+      "Human-in-the-loop system design",
+      "Model governance and lifecycle management",
+      "Bias, transparency, and explainability controls"
+    ],
+    "architecture_and_cloud": [
+      "Multi-cloud architecture (Azure, AWS, OCI, IBM Cloud)",
+      "Enterprise and solution architecture",
+      "Cloud-native and containerised systems",
+      "OpenShift and Kubernetes platforms"
+    ],
+    "data_and_ai": [
+      "Data engineering pipelines",
+      "Machine Learning systems",
+      "Generative AI and LLM-based systems",
+      "RAG architectures",
+      "Agentic AI systems",
+      "Computer Vision and NLP"
+    ],
+    "engineering_and_delivery": [
+      "Python, C#, .NET, Java",
+      "Backend and API design",
+      "Agile / Scrum delivery",
+      "Engineering team leadership",
+      "Vendor and procurement management"
+    ],
+    "security_and_identity": [
+      "Secure AI architecture",
+      "Cybersecurity reviews",
+      "Identity and access management (Azure AD / Entra ID)",
+      "Security assessments and production readiness"
+    ]
+  },
+
+  "education": [
+    {
+      "degree": "Bachelor in Computer Science",
+      "institution": "Universidad de Castilla La Mancha",
+      "country": "Spain",
+      "graduation_date": "1997-07"
+    }
+  ],
+
+  "certifications": [
+    "PRINCE2 Practitioner",
+    "ITIL v4 Foundation"
+  ],
+
+  "professional_experience": [
+    {
+      "organisation": "CONVOTIS GmbH (Accenture)",
+      "role": "Technical AI Leader / Product Lead",
+      "start_date": "2024-11",
+      "end_date": "Present",
+      "product_accountability": [
+        "Ownership of AI products with compliance-by-design principles",
+        "Definition of AI product roadmaps including governance and audit milestones",
+        "Alignment of business objectives with regulatory and ethical constraints"
+      ],
+      "governance_and_audit_responsibilities": [
+        "Integration of Responsible AI principles into AI product design",
+        "AI risk analysis aligned with GDPR and EU AI Act",
+        "Definition of audit artefacts (data lineage, model purpose,human oversight)",
+        "Support for client-facing AI compliance and assurance discussions"
+      ],
+      "projects": [
+        {
+          "name": "Conversational AI for Regulated Banking Environments",
+          "product_goal": "Deliver compliant conversational AIproducts for financial institutions.",
+          "responsible_ai_controls": [
+            "Human-in-the-loop escalation",
+            "Logging and traceability",
+            "Model output monitoring"
+          ],
+          "compliance_scope": ["GDPR", "AI risk classification"],
+          "technologies": ["LLMs", "RAG", "Secure APIs", "Cloud AI"]
+        },
+        {
+          "name": "Agentic AI Platform on OCI",
+          "product_goal": "Reusable internal AI platform withgovernance embedded.",
+          "responsible_ai_controls": [
+            "Tool-level access control",
+            "Explainable decision paths",
+            "Auditable agent actions"
+          ],
+          "compliance_scope": ["GDPR", "EU AI Act readiness"],
+          "technologies": ["OCI", "LangGraph", "Python", "Enterprise Systems"]
+        }
+      ]
+    },
+
+    {
+      "organisation": "Digital Transformation and Artificial Intelligence Agency (Regional Government)",
+      "role": "AI Engineer – Generative AI (Governance-focused)",
+      "start_date": "2024-09",
+      "end_date": "2024-11",
+      "projects": [
+        {
+          "name": "AI-assisted Regional Employment System",
+          "product_goal": "Improve employment matching while ensuringb lawful and fair AI use.",
+          "responsible_ai_controls": [
+            "Bias mitigation strategies",
+            "Human validation of recommendations",
+            "Data minimisation"
+          ],
+          "compliance_scope": ["GDPR", "Public-sector AI obligations"],
+          "technologies": ["LLMs", "RAG", "Python"]
+        },
+        {
+          "name": "Human-in-the-loop Document Approval Platform",
+          "product_goal": "Enable AI-assisted document review with legal accountability.",
+          "responsible_ai_controls": [
+            "Mandatory human approval",
+            "Decision traceability",
+            "Audit-ready logging"
+          ],
+          "compliance_scope": ["GDPR", "EU AI Act alignment"],
+          "technologies": ["OpenShift", "IBM Cloud Pak", "LLMs"]
+        }
+      ]
+    },
+
+    {
+      "organisation": "UNOPS – United Nations Office for Project Services",
+      "role": "Technology Development Associate / Product-led Technical Leader",
+      "start_date": "2018-01",
+      "end_date": "2024-02",
+      "governance_role": "De-facto Responsible AI and technology governance lead for multiple global initiatives.",
+      "flagship_projects": [
+        {
+          "name": "AI Video Analytics for Peacekeeping",
+          "product_goal": "Enhance situational awareness while maintaining ethical surveillance standards.",
+          "responsible_ai_controls": [
+            "Purpose limitation",
+            "Operational oversight",
+            "Controlled access to sensitive data"
+          ]
+        },
+        {
+          "name": "Hate Speech and Disinformation Monitoring Platform",
+          "product_goal": "Detect harmful content responsibly at global scale.",
+          "responsible_ai_controls": [
+            "Human moderation workflows",
+            "Transparency of model limitations",
+            "Governance approval processes"
+          ],
+          "impact": "Selected as baseline for UN-wide Mis/Disinformation solution."
+        }
+      ]
+    }
+  ]
+}

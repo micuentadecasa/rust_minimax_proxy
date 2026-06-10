@@ -150,31 +150,39 @@ When a user asks for a new feature that is also an agentic solution, both skills
 - Playwright screenshot polling/deduplication policy for UI verification.
 - A reuse checklist for deriving new solutions from this repository.
 
-## 10. React LangGraph PRD/plan workflow
+## 10. React LangGraph coordinator workflow
 
-The React app now has a second chat mode: **PRD → plan LangGraph**.
+The React app defaults to a coordinator-routed agent graph.
 
-- New graph module: `app/src/agentGraph.js`.
+- Graph module: `app/src/agentGraph.js`.
 - Durable graph tests: `app/src/agentGraph.test.mjs` using Node's built-in test runner with mocked proxy responses.
 - Frontend package changes:
-  - `@langchain/langgraph` is installed for a two-node graph (`prdAgent` then `planningAgent`).
+  - `@langchain/langgraph` is installed for a coordinator graph.
   - `npm test` runs `node --test src/*.test.mjs`.
 - Runtime boundary remains browser → Rust proxy:
-  - Both agents call `POST ${VITE_PROXY_BASE_URL}/v1/chat/completions`.
+  - Specialist agents call `POST ${VITE_PROXY_BASE_URL}/v1/chat/completions`.
   - No new Rust routes were added.
   - No dedicated CopilotKit runtime server exists yet.
+- Agent graph contract:
+  - Coordinator Agent uses a deterministic router and does not call the LLM.
+  - PRD Agent handles PRD/product requirements/spec/story/success-metric requests.
+  - Planning Agent handles implementation plan/phase/task/test/roadmap requests.
+  - Ambiguous product requests default to PRD Agent.
+  - Only one specialist is called per user request in this round.
 - UI contract in `app/src/main.jsx`:
-  - The default mode is now `prd-plan` so the first submit launches the two-agent graph instead of normal assistant chat.
-  - Mode selector: `data-testid="mode-select"`; users can still choose normal chat manually.
-  - Submit/loading copy says `Run agent graph` / `Running PRD Agent, then Planning Agent…` while in graph mode.
+  - Default mode is `agent-router`; normal chat remains manually selectable.
+  - Mode selector: `data-testid="mode-select"`.
+  - Submit/loading copy says `Ask coordinator` / `Coordinator Agent is choosing a specialist…` while in graph mode.
   - Loading step text: `data-testid="agent-step-status"`.
-  - Ordered trace wrapper: `data-testid="agent-trace"`, rendered inside `data-testid="message-list"` so agent identity/tool cards appear in the conversation rather than below it.
-  - PRD Agent card: `data-testid="agent-card-prd"`, labeled as the first agent, showing name, role, status, tool list, and PRD output.
-  - Planning Agent card: `data-testid="agent-card-plan"`, labeled as the second agent, showing name, role, status, tool list, and plan output after the PRD agent completes.
+  - Ordered trace wrapper: `data-testid="agent-trace"`, rendered inside `data-testid="message-list"` so agent identity/tool cards appear in the conversation.
+  - Conversation is vertical: user message, Coordinator Agent card, then the selected specialist card.
+  - Coordinator card: `data-testid="agent-card-coordinator"`, showing route decision and reason.
+  - PRD Agent card: `data-testid="agent-card-prd"`, showing name, role, status, tool list, and PRD output when selected.
+  - Planning Agent card: `data-testid="agent-card-plan"`, showing name, role, status, tool list, and plan output when selected.
   - Final outputs remain queryable as `data-testid="prd-output"` and `data-testid="plan-output"`.
 - Agent metadata is exported from `app/src/agentGraph.js` as `AGENTS`; graph progress events include `agentId`, `agentName`, `role`, `tools`, `status`, and `output`.
-- Styling for graph agent trace cards lives in `app/src/styles.css`.
-- Generated Playwright visual-verification script for this round lives at `.test/playwright/tests/langgraph-prd-plan-ui.spec.mjs`; it polls screenshots, hashes duplicates, and writes `.test/playwright/screenshot-analysis.json` when run.
+- Styling for vertical graph agent trace cards lives in `app/src/styles.css`.
+- Generated Playwright verification for this round lives at `.test/playwright/tests/coordinator-agent-routing.spec.mjs`.
 
 Verification run for this change:
 
@@ -186,11 +194,63 @@ cd app && npm run build
 cd app && npx playwright test --config=../.test/playwright/playwright.config.mjs
 ```
 
-The Playwright test uses mocked proxy responses, asserts that the default selector value is `prd-plan`, submits without manually changing mode, verifies `PRD Agent`, `Planning Agent`, and `MiniMax proxy chat completion` are visible inside the chat conversation, and captures `.test/playwright/screenshots/default-agent-graph-final.png` plus `.test/playwright/screenshot-analysis.json`.
+The Playwright test uses mocked proxy responses, asserts that the default selector value is `agent-router`, submits PRD and plan prompts, verifies that the Coordinator Agent chooses exactly one specialist, and captures `.test/playwright/screenshots/coordinator-prd-route.png`, `.test/playwright/screenshots/coordinator-plan-route.png`, plus `.test/playwright/screenshot-analysis.json`.
 
 `npm run build` currently succeeds with Vite warnings from dependency/browser externalization and large chunks after adding LangGraph/CopilotKit dependencies. Future production hardening should consider code-splitting or moving LangGraph orchestration behind a backend runtime.
 
-## 11. Known gaps / future candidates
+## 11. UNJobNet Spain Jobs Agent
+
+The coordinator graph now includes a third specialist route for job-search requests.
+
+- Python scraper package: `jobs_scraper/`.
+- Python dependencies: `requirements.txt` with FastAPI, Uvicorn, HTTPX, Scrapy, and pytest.
+- Scraper parser: `jobs_scraper/unjobnet.py`.
+  - Source URLs:
+    - `https://www.unjobnet.org/countries/Spain`
+    - `https://www.unjobnet.org/jobs?keywords=artificial`
+    - `https://unjobs.org/duty_stations/spain`
+  - Uses Scrapy `Selector` parsing over fetched HTML.
+  - Normalizes relative UNJobNet job URLs against `https://www.unjobnet.org` and UNJobs relative URLs against `https://unjobs.org`.
+  - Supports UNJobs `/vacancies/...` links in addition to UNJobNet `/jobs/detail/...` links.
+  - Merges sources and deduplicates jobs by URL.
+  - Loads `jobs_scraper/cv.json` for Luis Molina Martinez and deterministically filters jobs by CV fit.
+  - CV-fit terms prioritize Responsible AI, AI governance, GDPR, EU AI Act, model governance, RAG, LangGraph, AI architecture, product/technical leadership, cloud, Python, data/AI engineering, security, and UN experience.
+  - Filters first for informatics/data/artificial-intelligence related search terms, then excludes jobs without enough CV overlap. Returned jobs include `cvMatchedTerms`, `cvMatchScore`, and `cvMatchReason`.
+  - Explicit queries such as `artificial intelligence` narrow matching to explicit terms, while generic job prompts use the full default domain term list.
+- Local scraper API: `jobs_scraper/service.py`.
+  - `GET /health` — service health.
+  - `GET /jobs/search?q=<query>&limit=<n>` — returns `{ source, sources, query, jobs }`; `source` remains the Spain URL for backwards compatibility and `sources` lists all scraped URLs.
+  - Default port in launcher: `JOBS_PORT=8090`.
+- React/LangGraph integration:
+  - `app/src/agentGraph.js` adds `AGENTS.jobs` and a `jobs` coordinator route.
+  - Job prompts route to Jobs Agent when they mention jobs/positions/vacancies/careers/work. Informatics/data/AI/technology terms improve the route reason and scraper filtering, while generic job prompts still search the default informatics/data/AI domain.
+  - Jobs Agent calls `VITE_JOBS_API_BASE_URL` directly; default is `http://localhost:8090`.
+  - Jobs Agent does not call the MiniMax proxy in this round; it returns structured scraper artifacts.
+- UI integration in `app/src/main.jsx`:
+  - Jobs Agent cards render inside `data-testid="message-list"`.
+  - Job cards use deterministic selectors: `job-card`, `job-title`, `job-organization`, `job-location`, `job-deadline`, `job-link`, `job-cv-match`, and `jobs-empty`.
+  - Conversation remains vertical: user message, Coordinator Agent card, Jobs Agent card with nested job cards.
+- Styling for job cards lives in `app/src/styles.css`.
+- `run_app.sh` now starts three local processes in order:
+  1. MiniMax Rust proxy.
+  2. UNJobNet jobs scraper service.
+  3. React app with `VITE_PROXY_BASE_URL` and `VITE_JOBS_API_BASE_URL`.
+
+Verification run for this change:
+
+```bash
+.venv/bin/python -m pytest jobs_scraper/tests
+bash -n run_app.sh
+cargo check
+cargo test
+cd app && npm test
+cd app && npm run build
+cd app && npx playwright test --config=../.test/playwright/playwright.config.mjs
+```
+
+A live local scraper smoke also returned current UNJobNet Spain matches for `data ai`, including `Data Center Assistant Internship` and `INFORMATION SYSTEMS OFFICER (Temporary Job Opening)` at the time of the run. A later live smoke for `artificial intelligence` confirmed the service fetched both `https://www.unjobnet.org/countries/Spain` and `https://www.unjobnet.org/jobs?keywords=artificial`, applied CV-fit filtering, and returned jobs with CV match metadata. The scraper was then extended to include `https://unjobs.org/duty_stations/spain`; fixture tests prove UNJobs relative `/vacancies/...` URLs normalize to `https://unjobs.org/...` and still pass through CV-fit filtering. Durable tests use fixture/mocked HTML and mocked browser service responses so they do not depend on live UNJobNet/UNJobs availability.
+
+## 12. Known gaps / future candidates
 
 - No OpenAI-compatible streaming response translation yet.
 - No dedicated Rust integration test harness yet.

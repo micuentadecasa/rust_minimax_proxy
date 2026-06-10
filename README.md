@@ -57,8 +57,12 @@ The browser app lives in `app/` and uses:
 
 The UI includes two modes:
 
-- **Normal chat** posts directly to the proxy's `/v1/chat/completions` endpoint and renders the assistant response.
-- **PRD → plan LangGraph** runs a two-agent graph in the React app: a PRD agent turns the user's request into product requirements, then a planning agent turns that PRD into an implementation plan. Both agents call the Rust proxy through the same OpenAI-compatible endpoint.
+- **Coordinator agent graph** is the default. A visible Coordinator Agent reads your request and routes it to exactly one specialist:
+  - PRD Agent for PRDs, requirements, specs, stories, and success metrics.
+  - Planning Agent for implementation plans, phases, tasks, tests, and roadmaps.
+  - Jobs Agent for Spain job searches related to informatics, data, artificial intelligence, and related technology terms. It calls a local Python/Scrapy UNJobNet scraper service and renders one card per matching job.
+  The conversation renders vertically: your message, the Coordinator Agent decision, then the selected specialist answer with agent name, role, status, tools used, and any structured cards.
+- **Normal chat** remains available from the mode selector and posts directly to the proxy's `/v1/chat/completions` endpoint.
 
 The app is wrapped with CopilotKit so future solutions can add a dedicated CopilotKit runtime, actions, richer widgets, and agent state.
 
@@ -70,12 +74,14 @@ Run the full local app:
 
 This script:
 
-1. Stops stale listeners on the proxy/app ports.
+1. Stops stale listeners on the proxy/jobs/app ports.
 2. Starts the Rust proxy on `http://localhost:8080`.
-3. Waits for `/health`.
-4. Installs app dependencies if missing.
-5. Starts the React app on `http://localhost:5173`.
-6. Cleans up both processes on exit or Ctrl+C.
+3. Waits for proxy `/health`.
+4. Starts the Python UNJobNet jobs scraper service on `http://localhost:8090`.
+5. Waits for scraper `/health`.
+6. Installs app dependencies if missing.
+7. Starts the React app on `http://localhost:5173` with `VITE_PROXY_BASE_URL` and `VITE_JOBS_API_BASE_URL`.
+8. Cleans up all local processes on exit or Ctrl+C.
 
 Open:
 
